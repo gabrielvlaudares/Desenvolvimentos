@@ -1,0 +1,176 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================================
+// TABELAS DO PAINEL ADMIN
+// ===================================
+
+model LocalUser {
+  id            Int      @id @default(autoincrement())
+  username      String   @unique
+  passwordHash  String?
+  nome          String
+  email         String?  @unique
+  departamento  String?
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+  grupos        UserGroupLink[]
+
+  gestorId      Int?
+  gestor        LocalUser?       @relation("GestorParaSubordinado", fields: [gestorId], references: [id], onDelete: SetNull)
+  subordinados  LocalUser[]      @relation("GestorParaSubordinado")
+
+  // --- NOVAS RELAÇÕES PARA SUBSTITUIÇÃO ---
+  substituicoesAtivas   GestorSubstituto[] @relation("GestorOriginal")
+  substituicoesComoSub  GestorSubstituto[] @relation("GestorSubstituto")
+}
+
+model AppConfig {
+// (Conteúdo inalterado)
+  key              String  @id
+  value            String?
+  descricao        String?
+  AD_BIND_DN       String? @map("AD_BIND_DN")
+  AD_BIND_PASSWORD String? @map("AD_BIND_PASSWORD")
+}
+
+model PermissionGroup {
+// (Conteúdo inalterado)
+  id                       Int      @id @default(autoincrement())
+  nome                     String   @unique
+  descricao                String?
+  canAccessAdminPanel      Boolean  @default(false) @map("can_access_admin_panel")
+  canManageUsers           Boolean  @default(false) @map("can_manage_users")
+  canManageGroups          Boolean  @default(false) @map("can_manage_groups")
+  canManageConfig          Boolean  @default(false) @map("can_manage_config")
+  canPerformApprovals      Boolean  @default(false) @map("can_perform_approvals")
+  canAccessPortariaControl Boolean  @default(false) @map("can_access_portaria_control")
+  canCreateSaidaMaquina    Boolean  @default(false) @map("can_create_saida_maquina")
+  canCreateTransferencia   Boolean  @default(false) @map("can_create_transferencia")
+  canViewAuditLog          Boolean  @default(false) @map("can_view_audit_log")
+
+  usuarios UserGroupLink[]
+}
+
+model UserGroupLink {
+// (Conteúdo inalterado)
+  usuario     LocalUser       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId     Int
+  grupo         PermissionGroup @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  grupoId       Int
+  @@id([usuarioId, grupoId])
+}
+
+// --- NOVA TABELA ---
+model GestorSubstituto {
+  id                  Int      @id @default(autoincrement())
+  dataInicio          DateTime
+  dataFim             DateTime
+
+  gestorOriginalId    Int
+  gestorOriginal      LocalUser @relation("GestorOriginal", fields: [gestorOriginalId], references: [id], onDelete: Cascade)
+
+  gestorSubstitutoId  Int
+  gestorSubstituto    LocalUser @relation("GestorSubstituto", fields: [gestorSubstitutoId], references: [id], onDelete: Cascade)
+  
+  criadoEm            DateTime @default(now())
+  criadoPorUpn        String // Username do admin que criou
+
+  @@index([gestorOriginalId])
+  @@index([dataInicio, dataFim])
+}
+// --- FIM NOVA TABELA ---
+
+
+// ===================================
+// TABELAS DE NEGÓCIO
+// ===================================
+
+model MaquinaSaida {
+// (Conteúdo inalterado)
+  id                      Int      @id @default(autoincrement())
+  processoId              String   @unique @default(uuid())
+  idSequencial            Int      @unique @default(autoincrement())
+  tipoSaida               String
+  statusProcesso          String
+  solicitante             String
+  areaResponsavel         String
+  criadoPorUpn            String
+  criadoEm                DateTime @default(now())
+  gestorEmail             String
+  gestorAprovadorUpn      String?
+  dataAprovacao           DateTime?
+  motivoRejeicao          String?
+  descricaoMaterial       String
+  quantidade              Int
+  motivoSaida             String
+  dataEnvio               DateTime
+  prazoRetorno            DateTime?
+  dataSaidaEfetiva        DateTime?
+  dataRetornoEfetivo      DateTime?
+  portariaSaida           String?
+  vigilanteSaidaUpn       String?
+  nfSaida                 String?
+  pdfUrlSaida             String?
+  nfRetorno               String?
+  pdfUrlRetorno           String?
+  observacoesRetorno      String?
+  retornoConfirmadoPorUpn String?
+}
+
+model Transferencia {
+// (Conteúdo inalterado)
+  id                      Int      @id @default(autoincrement())
+  processoId              String   @unique @default(uuid())
+  idSequencial            Int      @unique @default(autoincrement())
+  statusProcesso          String
+  criadoPorUpn            String
+  criadoEm                DateTime @default(now())
+  nomeRequisitante        String
+  setor                   String?
+  gestor                  String?
+  dataSaidaSolicitada     DateTime
+  numeroNf                String
+  pdfUrl                  String?
+  meioTransporte          String?
+  tipoCarro               String?
+  placaVeiculo            String?
+  nomeTransportador       String?
+  portariaSaida           String
+  portariaDestino         String
+  vigilanteSaidaUpn       String?
+  dataSaidaEfetiva        DateTime?
+  decisaoSaida            String?
+  obsSaida                String?
+  vigilanteChegadaUpn     String?
+  dataChegadaEfetiva      DateTime?
+  decisaoChegada          String?
+  obsChegada              String?
+}
+
+// ===================================
+// TABELA DE AUDITORIA
+// ===================================
+
+model ProcessoEvento {
+// (Conteúdo inalterado)
+  id               Int      @id @default(autoincrement())
+  timestamp        DateTime @default(now())
+  usuarioUpn       String
+  acao             String
+  entityType       String
+  entityIdentifier String
+  detalhes         String?
+
+  @@index([timestamp])
+  @@index([usuarioUpn])
+  @@index([entityType, entityIdentifier])
+}
